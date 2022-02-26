@@ -2,13 +2,14 @@
 
 #setup the directory to import our files
 getwd()
-setwd("/Users/vigne/OneDrive/Desktop/divvy-tripdata-csv")
+setwd("-----") # Add your files location path and run.
 
 #load the required libraries
 install.packages("tidyverse")
 install.packages("geosphere")   #to calculate the distance between latitude and longitude points
 library(tidyverse)              #calculations
 library(lubridate)              #dates 
+library(DescTools)              # To calculate mode function
 library(hms)                    #time
 library(data.table)             #exporting data frame
 library(ggplot2)                #visualize data
@@ -34,11 +35,8 @@ yeardata <- rbind(jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec)
 #remove the individual files to save space (optional). I had to remove these individual files since I was using RStudio desktop.
 remove(jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec)
 
-#new data frame is created for new columns
+#assigning new dataset name to perform the data manipulation 
 tripdata <- yeardata
-view(tripdata) #view our data frame
-
-#drop the null value rows and check for duplicate values to miss the errors
 tripdata <- na.omit(tripdata)     #remove rows with NA values
 tripdata <- distinct(tripdata)    #remove duplicate rows
 
@@ -46,6 +44,7 @@ tripdata <- distinct(tripdata)    #remove duplicate rows
 colnames(tripdata) #get column names
 tripdata <- tripdata %>% 
   select(-c(start_station_name, start_station_id, end_station_name, end_station_id)) 
+colnames(tripdata) #dataset with removed columns.
 
 #dropped start_station_name, start_station_id, end_station_name, end_station_id columns 
 #we can drop these (start_lat, start_lng, end_lat, end_lng) if not needed or 
@@ -90,6 +89,7 @@ tripdata <-tripdata %>%  mutate(monthname =
 )
 
 
+#only when the lat and lng datatypes are in different format else if they are in numeric format we can directly use the distance calculation method.
 #convert lat and lng columns from chr to numeric 
 tripdata[5:6] <- lapply(tripdata[5:6], as.numeric)
 tripdata[7:8] <- lapply(tripdata[7:8], as.numeric)
@@ -107,23 +107,47 @@ view(tripdata) #view our final data frame
 fwrite(tripdata, "tripdata.csv") #this will export our data frame to our local
 
 #calculations
-#1. To get the monthly total rides and average ride length.
+#1. To get the total rides and average ride length by month.
 tripdata %>% 
-  group_by(monthname) %>% 
-  summarise(total_rides = n(), avg_ride_length = mean(ride_length))
-#2. To get the total rides group by member/casual & rideable type.
-tripdata %>% 
-  group_by(member_casual, rideable_type) %>% 
-  summarise(total_rides = n())
-#3. To get the total rides and average ride length group by member/casual & rideable type.
-tripdata %>% 
-  group_by(member_casual, rideable_type) %>% 
+  group_by(monthname, member_casual) %>% 
   summarise(total_rides = n(), avg_ride_length = mean(ride_length))
 
+#2. To get the total rides and average ride length by week
+tripdata %>% 
+  group_by(weekday, member_casual) %>% 
+  summarise(total_rides = n(), avg_ride_length = mean(ride_length))
+
+#3. To get the total rides and average(mean) ride length group by member/casual & rideable type.
+tripdata %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_rides = n(), avg_ride_length = mean(ride_length), avg_distanve = mean(distance))
+
+#4. To get the max ride length group by member/casual by month.
+tripdata %>% 
+  group_by(member_casual, monthname) %>% 
+  summarise(max(ride_length), max(distance))
+
+#5. To get the max ride length group by member/casual by week.
+tripdata %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(max(ride_length), max(distance))
+
+#6. To get the mode of ride length group by member/casual & rideable type.
+tripdata %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(Mode(ride_length, na.rm = FALSE))
 
 
 #plot the graphs as per business question
 
+#1. Average ride length by month.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=monthname,y=mean(ride_length), fill=member_casual)) + xlab("Month") + ylab("Average Ride Length")
+#2. Average ride length by week.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=weekday,y=mean(ride_length), fill=member_casual)) + xlab("Week") + ylab("Average Ride Length")
+#3. Average distance by month.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=monthname,y=mean(distance), fill=member_casual)) + xlab("Month") + ylab("Average Distance")
+#4. Average distance by week.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=weekday,y=mean(distance), fill=member_casual)) + xlab("Week") + ylab("Average Distance")
 
 #export the output graphs to save for documentation.
 

@@ -1,0 +1,153 @@
+---------------RStudio code-----------------
+
+#setup the directory to import our files
+getwd()
+setwd("-----") # Add your files location path and run.
+
+#load the required libraries
+install.packages("tidyverse")
+install.packages("geosphere")   #to calculate the distance between latitude and longitude points
+library(tidyverse)              #calculations
+library(lubridate)              #dates 
+library(DescTools)              # To calculate mode function
+library(hms)                    #time
+library(data.table)             #exporting data frame
+library(ggplot2)                #visualize data
+library(geosphere)              #calculations on lat and lng
+
+#load all 12 files and assign name to each file
+jan <- read.csv("202201-divvy-tripdata.csv")
+feb <- read.csv("202102-divvy-tripdata.csv")
+mar <- read.csv("202103-divvy-tripdata.csv")
+apr <- read.csv("202104-divvy-tripdata.csv")
+may <- read.csv("202105-divvy-tripdata.csv")
+jun <- read.csv("202106-divvy-tripdata.csv")
+jul <- read.csv("202107-divvy-tripdata.csv")
+aug <- read.csv("202108-divvy-tripdata.csv")
+sep <- read.csv("202109-divvy-tripdata.csv")
+oct <- read.csv("202110-divvy-tripdata.csv")
+nov <- read.csv("202111-divvy-tripdata.csv")
+dec <- read.csv("202112-divvy-tripdata.csv")
+
+#combine all 12 files into one file
+yeardata <- rbind(jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec)
+
+#remove the individual files to save space (optional). I had to remove these individual files since I was using RStudio desktop.
+remove(jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec)
+
+#assigning new dataset name to perform the data manipulation 
+tripdata <- yeardata
+tripdata <- na.omit(tripdata)     #remove rows with NA values
+tripdata <- distinct(tripdata)    #remove duplicate rows
+
+#remove columns
+colnames(tripdata) #get column names
+tripdata <- tripdata %>% 
+  select(-c(start_station_name, start_station_id, end_station_name, end_station_id)) 
+colnames(tripdata) #dataset with removed columns.
+
+#dropped start_station_name, start_station_id, end_station_name, end_station_id columns 
+#we can drop these (start_lat, start_lng, end_lat, end_lng) if not needed or 
+#we can use these columns to find distance between two points using geosphere library.  
+
+#calculate the ride length by subtracting ride end and start time
+tripdata$ride_length <- difftime(tripdata$ended_at, tripdata$started_at, units = "mins") #convert the ride length column to minutes
+
+
+#create columns for hour, day, week, month
+tripdata$date <- as.Date(tripdata$started_at) #create new column for date from start date (yyyy-mm-dd - default format)
+tripdata$hour <- hour(tripdata$started_at)                        #create new column for hour
+tripdata$day <- format(as.Date(tripdata$date), "%d")              #create column for day
+tripdata$week_number <- wday(tripdata$started_at)                 #create column for week number 
+tripdata$weekday <- format(as.Date(tripdata$date), "%A")          #create column for week & %A gives Full weekday format
+tripdata$month_number <- format(as.Date(tripdata$date), "%m")     #create column for month number 
+tripdata$month <- format(as.Date(tripdata$date), "%B")            #create column for month
+
+
+#rearranging columns (optional)
+tripdata <- tripdata[,c(1,2,3,4,5,6,7,8,9,10,11,15,14,16,12,13,17)] #rearranging columns in Data frame
+
+#rename columns (optional)
+#colnames(tripdata) <- c("ride_id", "rideable_type", "started_at", "ended_at" ....) [renaming column names," " - indicates new column names followed by comma]
+
+
+#create new column for month name to get the month values in order while visualizing 
+tripdata <-tripdata %>%  mutate(monthname = 
+                                  case_when(month_number == "01" ~ "January",
+                                            month_number == "02" ~ "February",
+                                            month_number == "03" ~ "March",
+                                            month_number == "04" ~ "April",
+                                            month_number == "05" ~ "May",
+                                            month_number == "06" ~ "June",
+                                            month_number == "07" ~ "July",
+                                            month_number == "08" ~ "August",
+                                            month_number == "09" ~ "September",
+                                            month_number == "10" ~ "October",
+                                            month_number == "11" ~ "November",
+                                            month_number == "12" ~ "December"
+                                  )
+)
+
+
+#only when the lat and lng datatypes are in different format else if they are in numeric format we can directly use the distance calculation method.
+#convert lat and lng columns from chr to numeric 
+tripdata[5:6] <- lapply(tripdata[5:6], as.numeric)
+tripdata[7:8] <- lapply(tripdata[7:8], as.numeric)
+#to check the columns datatype
+str(tripdata)
+
+#Calculate distance latitude longitude
+tripdata$distance <- round(distHaversine(tripdata[,c("start_lng", "start_lat")], tripdata[,c("end_lng", "end_lat")])/1000, 3)
+#Also dropped start and end lat and lng columns after calculating and creating a new column "distance" 
+
+#summarize final data
+view(tripdata) #view our final data frame
+
+#use the export function to save the csv file to local
+fwrite(tripdata, "tripdata.csv") #this will export our data frame to our local
+
+#calculations
+#1. To get the total rides and average ride length by month.
+tripdata %>% 
+  group_by(monthname, member_casual) %>% 
+  summarise(total_rides = n(), avg_ride_length = mean(ride_length))
+
+#2. To get the total rides and average ride length by week
+tripdata %>% 
+  group_by(weekday, member_casual) %>% 
+  summarise(total_rides = n(), avg_ride_length = mean(ride_length))
+
+#3. To get the total rides and average(mean) ride length group by member/casual & rideable type.
+tripdata %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_rides = n(), avg_ride_length = mean(ride_length), avg_distanve = mean(distance))
+
+#4. To get the max ride length group by member/casual by month.
+tripdata %>% 
+  group_by(member_casual, monthname) %>% 
+  summarise(max(ride_length), max(distance))
+
+#5. To get the max ride length group by member/casual by week.
+tripdata %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(max(ride_length), max(distance))
+
+#6. To get the mode of ride length group by member/casual & rideable type.
+tripdata %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(Mode(ride_length, na.rm = FALSE))
+
+
+#plot the graphs as per business question
+
+#1. Average ride length by month.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=monthname,y=mean(ride_length), fill=member_casual)) + xlab("Month") + ylab("Average Ride Length")
+#2. Average ride length by week.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=weekday,y=mean(ride_length), fill=member_casual)) + xlab("Week") + ylab("Average Ride Length")
+#3. Average distance by month.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=monthname,y=mean(distance), fill=member_casual)) + xlab("Month") + ylab("Average Distance")
+#4. Average distance by week.
+ggplot(data=tripdata) + geom_col(mapping=aes(x=weekday,y=mean(distance), fill=member_casual)) + xlab("Week") + ylab("Average Distance")
+
+#export the output graphs to save for documentation.
+
